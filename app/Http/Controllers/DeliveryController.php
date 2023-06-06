@@ -4,33 +4,43 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use App\Services\NovaPoshtaDeliveryService;
+use App\Services\UkrposhtaDeliveryService;
 
 class DeliveryController extends Controller
 {
     public function sendContract(Request $request)
     {
-
-        // Получение данных о посылке и получателе из запроса
         $parcelData = $request->only(['width', 'height', 'length', 'weight']);
         $customerData = $request->only(['customer_name', 'phone_number', 'email', 'delivery_address']);
+        $deliveryServiceName = $request->input('delivery_service');
 
-        // Формирование данных для отправки на сервер Новой почты
-        $requestData = [
-            'customer_name' => $customerData['customer_name'],
-            'phone_number' => $customerData['phone_number'],
-            'email' => $customerData['email'],
-            'sender_address' => config('app.sender_address'),
-            'delivery_address' => $customerData['delivery_address']
+        $contractData = [
+            'parcelData' => $parcelData,
+            'customerData' => $customerData,
+            'sender_address' => config('app.sender_address')
         ];
 
-        // Отправка данных на сервер Новой почты
-        $response = Http::post('http://127.0.0.1:8001/api/novaposhta/delivery', $requestData);
+         $deliveryService = null;
 
-        // Обработка ответа от сервера Новой почты
-        if ($response->successful()) {
-            return response()->json(['message' => 'Данные успешно отправлены на сервер Новой почты']);
-        } else {
-            return response()->json(['message' => 'Произошла ошибка при отправке данных на сервер Новой почты'], 500);
-        }
+         switch ($deliveryServiceName) {
+             case 'nova_poshta':
+                 $deliveryService = new NovaPoshtaDeliveryService();
+                 break;
+             case 'ukrposhta':
+                 $deliveryService = new UkrposhtaDeliveryService();
+                 break;
+             
+             default:
+                 return response()->json(['message' => 'Неподдерживаемая служба доставки'], 400);
+         }
+ 
+         $response = $deliveryService->sendDeliveryData($contractData);
+ 
+         if ($response->getStatusCode() === 200) {
+             return response()->json(['message' => 'Данные успешно отправлены на сервер доставки']);
+         } else {
+             return response()->json(['message' => 'Произошла ошибка при отправке данных на сервер доставки'], 500);
+         }
     }
 }
